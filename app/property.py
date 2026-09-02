@@ -1,0 +1,71 @@
+PROPERTY = {
+    "property_id": "Dallas-NE-75231-MTR-01",
+    "location": "Northeast Dallas / Vickery Meadow, Texas 75231",
+    "property_type": "Entire furnished apartment",
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "monthly_rent": 3200,
+    "minimum_stay_days": 30,
+    "furnished": True,
+    "utilities_included": True,
+    "wifi": True,
+    "workspace": True,
+    "full_kitchen": True,
+    "in_suite_laundry": True,
+    "covered_parking_spaces": 2,
+    "pets": "Small dog or cat subject to property rules and owner confirmation",
+    "smoking": "No smoking inside",
+    "nearby_medical_facilities": [
+        "Texas Health Presbyterian Hospital Dallas",
+        "Medical City Dallas Hospital",
+        "First Baptist Medical Center",
+        "Kindred Hospital Dallas Central",
+    ],
+    "highway_access": ["Hwy 75", "635 / LBJ Freeway"],
+    "primary_conversion_channel": "Furnished Finder",
+    "existing_channels": [
+        "Airbnb",
+        "Furnished Finder",
+        "Booking.com",
+        "CircleRN",
+    ],
+}
+
+
+CAMPAIGN_QUERIES = {
+    "healthcare": [
+        '"travel nurse" Dallas furnished housing 13 week assignment',
+        '"travel nurse" "Medical City Dallas" housing',
+        '"travel nurse" "Texas Health Presbyterian" Dallas housing',
+        '"traveling healthcare professional" Dallas temporary housing',
+        '"healthcare traveler" Dallas furnished apartment',
+    ],
+    "corporate": [
+        '"IT consultant" Dallas temporary housing',
+        '"technical project manager" Dallas contract housing',
+        '"banking consultant" Dallas temporary assignment',
+        '"software consultant" Dallas 90 day assignment',
+        '"corporate relocation" Dallas furnished housing',
+    ],
+    "relocation": [
+        '"relocating to Dallas" furnished housing',
+        '"moving to Dallas" temporary furnished apartment',
+        '"Dallas" "between homes" temporary housing',
+        '"Dallas" "home closing" temporary housing',
+        '"Dallas" employee relocation temporary housing',
+    ],
+    "partners": [
+        'Dallas travel nurse staffing agency housing',
+        'Dallas healthcare staffing agency corporate housing',
+        'Dallas medical staffing temporary housing',
+        'Dallas corporate relocation housing provider',
+        'Dallas insurance temporary housing provider',
+    ],
+    "social": [
+        '"Dallas furnished housing" nurse',
+        '"Dallas furnished apartment" 30 days',
+        '"Dallas temporary housing" consultant',
+        '"Dallas mid term rental" professional',
+        '"Dallas furnished rental" relocation',
+    ],
+}

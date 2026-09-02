@@ -1,0 +1,11 @@
+{
+  "name": "dallas-furnished-rental-agent-a",
+  "version": "1.2.0",
+  "agent": "Agent A - Lead Generation Agent",
+  "target": "Azure App Service Linux / GitHub Actions",
+  "authentication": "OpenAI API key + Azure App Service publish profile",
+  "database": "Azure Database for PostgreSQL Flexible Server",
+  "primary_conversion_channel": "Furnished Finder",
+  "entra_required": false,
+  "live_azure_validation": false
+}

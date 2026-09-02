@@ -1,0 +1,30 @@
+name: Scheduled Agent A Lead Discovery
+
+on:
+  schedule:
+    - cron: "0 13 * * 1,3,5"
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run healthcare campaign
+        env:
+          AGENT_URL: ${{ secrets.AGENT_A_BASE_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          curl --fail-with-body -X POST "$AGENT_URL/agent/run" \
+            -H "X-Agent-Key: $AGENT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"campaign":"healthcare","max_queries":5}'
+
+      - name: Run corporate campaign
+        env:
+          AGENT_URL: ${{ secrets.AGENT_A_BASE_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          curl --fail-with-body -X POST "$AGENT_URL/agent/run" \
+            -H "X-Agent-Key: $AGENT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"campaign":"corporate","max_queries":5}'

@@ -1,0 +1,45 @@
+name: Deploy Agent A to Azure App Service
+
+on:
+  push:
+    branches: [main]
+
+# This workflow intentionally uses an App Service publish profile because the
+# user's current Microsoft subscription does not provide the Entra tenant
+# capability needed for GitHub OIDC. The publish profile remains encrypted in
+# GitHub Actions secrets.
+
+env:
+  AZURE_WEBAPP_NAME: REPLACE_WITH_YOUR_APP_SERVICE_NAME
+  PYTHON_VERSION: "3.12"
+  AZURE_WEBAPP_PACKAGE_PATH: "."
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test
+        run: pytest -q
+
+      - name: Azure App Service build
+        uses: azure/appservice-build@v2
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
