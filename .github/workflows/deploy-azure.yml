@@ -34,9 +34,6 @@ jobs:
       - name: Test
         run: pytest -q
 
-      - name: Azure App Service build
-        uses: azure/appservice-build@v2
-
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
