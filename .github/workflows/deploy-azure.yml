@@ -10,7 +10,7 @@ on:
 # GitHub Actions secrets.
 
 env:
-  AZURE_WEBAPP_NAME: REPLACE_WITH_YOUR_APP_SERVICE_NAME
+  AZURE_WEBAPP_NAME: Dallas-Rental-Agent
   PYTHON_VERSION: "3.12"
   AZURE_WEBAPP_PACKAGE_PATH: "."
 
