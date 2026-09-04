@@ -1,8 +1,9 @@
+import logging
 from sqlalchemy.orm import Session
 from .property import CAMPAIGN_QUERIES
 from .ai import extract_candidate
 from .models import Lead, SearchRun
-
+logger = logging.getLogger(__name__)
 
 async def run_campaign(
     db: Session,
@@ -20,6 +21,11 @@ async def run_campaign(
         try:
             candidate = await extract_candidate(query)
         except Exception as exc:
+             logger.exception(
+             "Demand-signal search failed: campaign=%s query=%s",
+              campaign,
+              query,
+            )
             db.add(SearchRun(campaign=campaign, query=query, results_found=0))
             continue
 
