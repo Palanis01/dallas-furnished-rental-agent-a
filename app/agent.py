@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from sqlalchemy.orm import Session
@@ -7,6 +8,8 @@ from .ai import extract_candidate
 from .models import Lead, SearchRun
 
 logger = logging.getLogger(__name__)
+
+QUERY_THROTTLE_SECONDS = 10.0
 
 
 async def run_campaign(
@@ -27,7 +30,16 @@ async def run_campaign(
 
     seen_urls = set()
 
-    for query in queries:
+    for index, query in enumerate(queries):
+        if index > 0:
+            logger.info(
+                "Throttling campaign query for %.1f seconds: campaign=%s query=%s",
+                QUERY_THROTTLE_SECONDS,
+                campaign,
+                query,
+            )
+            await asyncio.sleep(QUERY_THROTTLE_SECONDS)
+
         stats["queries"] += 1
 
         try:
