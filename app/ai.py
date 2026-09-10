@@ -1,10 +1,16 @@
 import asyncio
 import json
 import random
-from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
-from openai import AsyncOpenAI, RateLimitError
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    InternalServerError,
+    RateLimitError,
+)
 
 from .config import settings
 from .scoring import score_lead
@@ -55,9 +61,15 @@ LEAD_SCHEMA = {
     "additionalProperties": False,
 }
 
-MAX_RATE_LIMIT_RETRIES = 4
+MAX_TRANSIENT_RETRIES = 4
 BASE_BACKOFF_SECONDS = 4.0
 MAX_BACKOFF_SECONDS = 45.0
+TRANSIENT_EXCEPTIONS = (
+    RateLimitError,
+    InternalServerError,
+    APIConnectionError,
+    APITimeoutError,
+)
 
 
 def _client_and_model() -> tuple[AsyncOpenAI, str]:
@@ -93,29 +105,43 @@ def _client_and_model() -> tuple[AsyncOpenAI, str]:
     return client, settings.openai_model
 
 
-def _retry_delay_seconds(exc: RateLimitError, attempt: int) -> float:
+def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
 
     if headers:
-        retry_after_ms = headers.get("retry-after-ms") or headers.get("x-ms-retry-after-ms")
+        retry_after_ms = (
+            headers.get("retry-after-ms")
+            or headers.get("x-ms-retry-after-ms")
+        )
         if retry_after_ms:
             try:
-                return min(MAX_BACKOFF_SECONDS, max(0.0, float(retry_after_ms) / 1000.0))
+                return min(
+                    MAX_BACKOFF_SECONDS,
+                    max(0.0, float(retry_after_ms) / 1000.0),
+                )
             except (TypeError, ValueError):
                 pass
 
         retry_after = headers.get("retry-after")
         if retry_after:
             try:
-                return min(MAX_BACKOFF_SECONDS, max(0.0, float(retry_after)))
+                return min(
+                    MAX_BACKOFF_SECONDS,
+                    max(0.0, float(retry_after)),
+                )
             except (TypeError, ValueError):
                 try:
                     retry_at = parsedate_to_datetime(retry_after)
                     if retry_at.tzinfo is None:
                         retry_at = retry_at.replace(tzinfo=timezone.utc)
-                    delay = (retry_at - datetime.now(timezone.utc)).total_seconds()
-                    return min(MAX_BACKOFF_SECONDS, max(0.0, delay))
+                    delay = (
+                        retry_at - datetime.now(timezone.utc)
+                    ).total_seconds()
+                    return min(
+                        MAX_BACKOFF_SECONDS,
+                        max(0.0, delay),
+                    )
                 except (TypeError, ValueError, OverflowError):
                     pass
 
@@ -124,26 +150,33 @@ def _retry_delay_seconds(exc: RateLimitError, attempt: int) -> float:
     return min(MAX_BACKOFF_SECONDS, exponential + jitter)
 
 
-async def _create_response_with_rate_limit_retry(client: AsyncOpenAI, **kwargs):
+async def _create_response_with_transient_retry(
+    client: AsyncOpenAI,
+    **kwargs,
+):
     last_error = None
 
-    for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+    for attempt in range(MAX_TRANSIENT_RETRIES + 1):
         try:
             return await client.responses.create(**kwargs)
-        except RateLimitError as exc:
+        except TRANSIENT_EXCEPTIONS as exc:
             last_error = exc
-            if attempt >= MAX_RATE_LIMIT_RETRIES:
+
+            if attempt >= MAX_TRANSIENT_RETRIES:
                 raise
 
             await asyncio.sleep(_retry_delay_seconds(exc, attempt))
 
-    raise last_error
+    if last_error is not None:
+        raise last_error
+
+    raise RuntimeError("AI response request failed without an exception")
 
 
 async def extract_candidate(query: str) -> dict | None:
     client, model = _client_and_model()
 
-    response = await _create_response_with_rate_limit_retry(
+    response = await _create_response_with_transient_retry(
         client,
         model=model,
         instructions=SYSTEM_PROMPT,
