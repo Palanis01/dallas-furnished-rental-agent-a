@@ -20,6 +20,9 @@ async def run_campaign(
         "queries": 0,
         "results": 0,
         "new_leads": 0,
+        "provider_errors": 0,
+        "no_candidate_queries": 0,
+        "duplicate_leads": 0,
     }
 
     seen_urls = set()
@@ -30,6 +33,7 @@ async def run_campaign(
         try:
             candidate = await extract_candidate(query)
         except Exception:
+            stats["provider_errors"] += 1
             logger.exception(
                 "Demand-signal search failed: campaign=%s query=%s",
                 campaign,
@@ -52,15 +56,23 @@ async def run_campaign(
             )
         )
 
-        stats["results"] += 1 if candidate else 0
-
         if not candidate:
+            stats["no_candidate_queries"] += 1
+            logger.info(
+                "Demand-signal search completed with no qualifying candidate: "
+                "campaign=%s query=%s",
+                campaign,
+                query,
+            )
             continue
+
+        stats["results"] += 1
 
         source_url = candidate.get("source_url")
         result_key = source_url or f"{campaign}:{query}"
 
         if result_key in seen_urls:
+            stats["duplicate_leads"] += 1
             continue
 
         seen_urls.add(result_key)
@@ -75,6 +87,7 @@ async def run_campaign(
             )
 
         if existing:
+            stats["duplicate_leads"] += 1
             continue
 
         lead = Lead(
@@ -102,7 +115,13 @@ async def run_campaign(
 
     db.commit()
 
+    status = "completed"
+    if stats["provider_errors"] and stats["provider_errors"] == stats["queries"]:
+        status = "provider_error"
+    elif stats["provider_errors"]:
+        status = "completed_with_errors"
+
     return {
         **stats,
-        "status": "completed",
+        "status": status,
     }
