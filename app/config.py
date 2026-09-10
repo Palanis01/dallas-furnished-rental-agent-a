@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,7 +7,13 @@ class Settings(BaseSettings):
     app_version: str = "1.2.0"
     environment: str = "development"
 
-    database_url: str = "sqlite:///./agent_a.db"
+    database_url: str = Field(
+        default="sqlite:///./agent_a.db",
+        validation_alias=AliasChoices(
+            "DATABASE_URL",
+            "AZURE_POSTGRESQL_CONNECTIONSTRING",
+        ),
+    )
     agent_api_key: str = "change-me"
 
     # Direct OpenAI fallback
