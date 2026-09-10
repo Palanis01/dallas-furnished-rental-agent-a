@@ -34,11 +34,11 @@ PROPERTY = {
 
 CAMPAIGN_QUERIES = {
     "healthcare": [
-        '"travel nurse" Dallas furnished housing 13 week assignment',
-        '"travel nurse" "Medical City Dallas" housing',
-        '"travel nurse" "Texas Health Presbyterian" Dallas housing',
-        '"traveling healthcare professional" Dallas temporary housing',
-        '"healthcare traveler" Dallas furnished apartment',
+        '"looking for furnished housing" Dallas nurse',
+        '"need temporary housing" Dallas travel nurse',
+        '"seeking furnished apartment" Dallas 30 days',
+        '"housing needed" Dallas medical assignment',
+        '"temporary relocation housing" Dallas healthcare',
     ],
     "corporate": [
         '"IT consultant" Dallas temporary housing',
