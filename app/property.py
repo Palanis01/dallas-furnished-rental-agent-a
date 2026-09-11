@@ -32,40 +32,53 @@ PROPERTY = {
 }
 
 
+# V2 uses one broad, campaign-level discovery request instead of five separate
+# model calls. Each request contains multiple intent, geography, and duration
+# predicates so web search can maximize recall before AI qualification.
 CAMPAIGN_QUERIES = {
     "healthcare": [
-        '"looking for furnished housing" Dallas nurse',
-        '"need temporary housing" Dallas travel nurse',
-        '"seeking furnished apartment" Dallas 30 days',
-        '"housing needed" Dallas medical assignment',
-        '"temporary relocation housing" Dallas healthcare',
+        (
+            'Dallas OR "North Dallas" OR "Northeast Dallas" OR DFW '
+            'healthcare housing demand: '
+            '"looking for furnished housing" OR "need temporary housing" OR '
+            '"seeking furnished apartment" OR "housing needed" OR '
+            '"temporary relocation housing"; '
+            'nurse OR "travel nurse" OR physician OR therapist OR medical; '
+            '30 days OR "8 weeks" OR "13 weeks" OR "3 months"; '
+            'include Texas Health Presbyterian Hospital Dallas and Medical City Dallas'
+        )
     ],
     "corporate": [
-        '"IT consultant" Dallas temporary housing',
-        '"technical project manager" Dallas contract housing',
-        '"banking consultant" Dallas temporary assignment',
-        '"software consultant" Dallas 90 day assignment',
-        '"corporate relocation" Dallas furnished housing',
+        (
+            'Dallas OR "North Dallas" OR DFW corporate temporary housing demand: '
+            '"looking for furnished housing" OR "need temporary housing" OR '
+            '"seeking furnished apartment" OR relocation; '
+            'consultant OR "project manager" OR banking OR software OR IT; '
+            '30 days OR "60 days" OR "90 days" OR "3 months"'
+        )
     ],
     "relocation": [
-        '"relocating to Dallas" furnished housing',
-        '"moving to Dallas" temporary furnished apartment',
-        '"Dallas" "between homes" temporary housing',
-        '"Dallas" "home closing" temporary housing',
-        '"Dallas" employee relocation temporary housing',
+        (
+            'Dallas OR "North Dallas" OR DFW relocation housing demand: '
+            '"relocating to Dallas" OR "moving to Dallas" OR "between homes" OR '
+            '"home closing" OR "temporary relocation housing"; '
+            'furnished OR temporary; 30 days OR "60 days" OR "90 days"'
+        )
     ],
     "partners": [
-        'Dallas travel nurse staffing agency housing',
-        'Dallas healthcare staffing agency corporate housing',
-        'Dallas medical staffing temporary housing',
-        'Dallas corporate relocation housing provider',
-        'Dallas insurance temporary housing provider',
+        (
+            'Dallas organizations arranging 30+ day furnished housing: '
+            'travel nurse staffing OR healthcare staffing OR medical staffing OR '
+            'corporate relocation OR insurance temporary housing OR displacement housing; '
+            'prioritize organizations with evidence they coordinate housing for clients or employees'
+        )
     ],
     "social": [
-        '"Dallas furnished housing" nurse',
-        '"Dallas furnished apartment" 30 days',
-        '"Dallas temporary housing" consultant',
-        '"Dallas mid term rental" professional',
-        '"Dallas furnished rental" relocation',
+        (
+            'Dallas OR "North Dallas" OR DFW public housing-demand signals: '
+            '"looking for furnished housing" OR "need a furnished apartment" OR '
+            '"temporary housing needed" OR "mid term housing" OR relocation; '
+            'professional OR nurse OR consultant; 30 days OR "8 weeks" OR "13 weeks"'
+        )
     ],
 }
