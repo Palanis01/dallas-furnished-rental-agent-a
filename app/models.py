@@ -14,6 +14,7 @@ class Lead(Base):
     name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     source: Mapped[str] = mapped_column(String(100), default="web_search")
     campaign: Mapped[str] = mapped_column(String(50), index=True)
+    lead_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     occupation: Mapped[str | None] = mapped_column(String(200), nullable=True)
     assignment_location: Mapped[str | None] = mapped_column(String(300), nullable=True)
