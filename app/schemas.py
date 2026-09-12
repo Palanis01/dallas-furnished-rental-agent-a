@@ -12,6 +12,7 @@ class LeadOut(BaseModel):
     name: str | None
     source: str
     campaign: str
+    lead_type: str | None
     url: str | None
     occupation: str | None
     assignment_location: str | None
