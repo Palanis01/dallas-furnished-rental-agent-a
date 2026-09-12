@@ -49,7 +49,9 @@ or an explicit housing request must not by itself disqualify a credible
 ORGANIZATION_LEAD or ASSIGNMENT_SIGNAL. Prefer recent, specific Dallas-area
 evidence. The source_url for each candidate must be the exact public page that
 supports that candidate's evidence, not a related housing provider or general
-website. Return an empty candidates array only when no supported signal exists.
+website. Keep each candidate's evidence concise: one or two short sentences,
+preferably under 300 characters before the source citation. Return an empty
+candidates array only when no supported signal exists.
 """
 
 CANDIDATE_SCHEMA = {
@@ -109,7 +111,8 @@ DISCOVERY_SCHEMA = {
 MAX_TRANSIENT_RETRIES = 4
 BASE_BACKOFF_SECONDS = 4.0
 MAX_BACKOFF_SECONDS = 45.0
-MAX_OUTPUT_TOKENS = 2000
+MAX_OUTPUT_TOKENS = 5000
+MAX_JSON_PARSE_RETRIES = 1
 TRANSIENT_EXCEPTIONS = (
     RateLimitError,
     InternalServerError,
@@ -247,11 +250,34 @@ def _resolve_source_url(
     return None
 
 
-async def extract_candidate(query: str) -> dict | None:
-    """Run one campaign-level search and return its best supported signal."""
-    client, model = _client_and_model()
+def _response_status(response) -> str | None:
+    status = getattr(response, "status", None)
+    if status:
+        return str(status)
+    payload = response.model_dump() if hasattr(response, "model_dump") else {}
+    value = payload.get("status")
+    return str(value) if value is not None else None
 
-    response = await _create_response_with_transient_retry(
+
+def _parse_discovery_output(response) -> dict:
+    output_text = (getattr(response, "output_text", None) or "").strip()
+    status = _response_status(response)
+
+    if status and status.lower() not in {"completed", "complete", "succeeded"}:
+        raise ValueError(f"Discovery response incomplete: status={status}")
+    if not output_text:
+        raise ValueError("Discovery response contained no output_text")
+
+    try:
+        return json.loads(output_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Discovery response contained incomplete or malformed JSON"
+        ) from exc
+
+
+async def _create_discovery_response(client: AsyncOpenAI, model: str, query: str):
+    return await _create_response_with_transient_retry(
         client,
         model=model,
         instructions=SYSTEM_PROMPT,
@@ -260,7 +286,8 @@ async def extract_candidate(query: str) -> dict | None:
             "Run multiple varied searches within this one web-search-enabled response. "
             "First search for explicit housing need; then temporary assignment/relocation "
             "signals; then organizations that coordinate temporary housing. Return up to "
-            "five distinct supported signals and classify them. Campaign brief: " + query
+            "five distinct supported signals and classify them. Keep evidence concise and "
+            "return one complete JSON object matching the schema. Campaign brief: " + query
         ),
         tools=[
             {
@@ -282,7 +309,32 @@ async def extract_candidate(query: str) -> dict | None:
         include=["web_search_call.action.sources"],
     )
 
-    data = json.loads(response.output_text)
+
+async def extract_candidate(query: str) -> dict | None:
+    """Run one campaign-level search and return its best supported signal."""
+    client, model = _client_and_model()
+
+    response = None
+    data = None
+    parse_error = None
+
+    for parse_attempt in range(MAX_JSON_PARSE_RETRIES + 1):
+        response = await _create_discovery_response(client, model, query)
+        try:
+            data = _parse_discovery_output(response)
+            break
+        except ValueError as exc:
+            parse_error = exc
+            if parse_attempt >= MAX_JSON_PARSE_RETRIES:
+                raise
+            logger.warning(
+                "Discovery response JSON was incomplete or malformed; retrying once: %s",
+                exc,
+            )
+
+    if data is None:
+        raise parse_error or RuntimeError("Discovery response could not be parsed")
+
     raw_candidates = data.get("candidates", [])
     source_urls = _source_urls(response)
 
