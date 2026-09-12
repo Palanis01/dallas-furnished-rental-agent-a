@@ -64,6 +64,7 @@ async def agent_run(
 @app.get("/leads", response_model=list[LeadOut])
 def list_leads(
     classification: str | None = Query(default=None),
+    lead_type: str | None = Query(default=None),
     campaign: str | None = Query(default=None),
     status: str | None = Query(default=None),
     min_score: int | None = Query(default=None, ge=0, le=100),
@@ -75,6 +76,8 @@ def list_leads(
     query = db.query(Lead)
     if classification:
         query = query.filter(Lead.classification == classification)
+    if lead_type:
+        query = query.filter(Lead.lead_type == lead_type)
     if campaign:
         query = query.filter(Lead.campaign == campaign)
     if status:
