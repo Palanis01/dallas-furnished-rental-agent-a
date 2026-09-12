@@ -81,7 +81,7 @@ async def run_campaign(
         stats["results"] += 1
 
         source_url = candidate.get("source_url")
-        result_key = source_url or f"{campaign}:{query}"
+        result_key = source_url or f"{campaign}:{query}:{candidate.get('lead_type')}:{candidate.get('evidence')}"
 
         if result_key in seen_urls:
             stats["duplicate_leads"] += 1
@@ -106,6 +106,7 @@ async def run_campaign(
             name=candidate.get("name"),
             source="azure_openai_web_search",
             campaign=campaign,
+            lead_type=candidate.get("lead_type"),
             url=source_url,
             occupation=candidate.get("occupation"),
             assignment_location=candidate.get("assignment_location"),
