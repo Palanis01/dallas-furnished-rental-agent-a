@@ -5,14 +5,18 @@ on:
     branches: [main]
 
 # This workflow intentionally uses an App Service publish profile because the
-# user's current Microsoft subscription does not provide the Entra tenant
-# capability needed for GitHub OIDC. The publish profile remains encrypted in
-# GitHub Actions secrets.
+# current Microsoft subscription does not provide the Entra tenant capability
+# needed for GitHub OIDC. The publish profile remains encrypted in GitHub
+# Actions secrets.
+#
+# Runtime dependencies are installed into the deployment artifact itself.
+# This avoids depending on a second Oryx build after upload and prevents a
+# deployment from starting without packages such as uvicorn.
 
 env:
   AZURE_WEBAPP_NAME: Dallas-Rental-Agent
   PYTHON_VERSION: "3.12"
-  AZURE_WEBAPP_PACKAGE_PATH: "."
+  DEPLOY_DIR: deploy_package
 
 jobs:
   build-and-deploy:
@@ -26,17 +30,76 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -r requirements.txt
 
       - name: Test
         run: pytest -q
 
-      - name: Deploy to Azure App Service
+      - name: Build self-contained deployment package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "${DEPLOY_DIR}"
+          mkdir -p "${DEPLOY_DIR}"
+
+          rsync -a \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.venv/' \
+            --exclude '.pytest_cache/' \
+            --exclude '__pycache__/' \
+            --exclude 'tests/' \
+            --exclude "${DEPLOY_DIR}/" \
+            ./ "${DEPLOY_DIR}/"
+
+          python -m pip install \
+            --upgrade \
+            --target "${DEPLOY_DIR}" \
+            -r requirements.txt
+
+      - name: Verify deployment artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "${DEPLOY_DIR}/requirements.txt"
+          test -f "${DEPLOY_DIR}/app/main.py"
+          test -d "${DEPLOY_DIR}/uvicorn"
+          test -d "${DEPLOY_DIR}/fastapi"
+          test -d "${DEPLOY_DIR}/sqlalchemy"
+          test -d "${DEPLOY_DIR}/openai"
+
+          DEPLOY_PATH="${GITHUB_WORKSPACE}/${DEPLOY_DIR}"
+          cd /tmp
+          PYTHONPATH="${DEPLOY_PATH}" python -S - <<'PY'
+          import pathlib
+          import fastapi
+          import openai
+          import psycopg
+          import sqlalchemy
+          import uvicorn
+          from app.main import app
+
+          deploy_root = pathlib.Path(__import__('os').environ['PYTHONPATH']).resolve()
+          modules = [fastapi, openai, psycopg, sqlalchemy, uvicorn]
+          for module in modules:
+              module_path = pathlib.Path(module.__file__).resolve()
+              if deploy_root not in module_path.parents:
+                  raise RuntimeError(
+                      f"{module.__name__} loaded outside deployment artifact: {module_path}"
+                  )
+
+          if app is None:
+              raise RuntimeError("FastAPI application import failed")
+
+          print("Deployment artifact verification passed")
+          PY
+
+      - name: Deploy verified package to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+          package: ${{ env.DEPLOY_DIR }}
