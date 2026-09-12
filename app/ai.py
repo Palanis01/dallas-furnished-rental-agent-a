@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import random
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -15,15 +16,21 @@ from openai import (
 from .config import settings
 from .scoring import score_lead
 
+logger = logging.getLogger(__name__)
+
 
 SYSTEM_PROMPT = """
 You are Agent A, the Lead Generation Agent for a furnished 30+ day rental in
 Northeast Dallas, Texas.
 
-Search broadly for public evidence of housing demand, then classify each signal
-before property-fit scoring. Return up to five distinct signals from one search.
+Use broad discovery first, then strict qualification. For each campaign request,
+perform several varied public-web searches rather than treating the campaign brief
+as one literal Boolean query. Search separately for direct housing intent,
+temporary assignments or relocations, and organizations that arrange housing.
+Do not require every candidate to contain every profession, duration, location,
+or housing phrase in the campaign brief.
 
-Lead types:
+Return up to five distinct signals and classify each one:
 - DIRECT_HOUSING_LEAD: a person or organization explicitly seeking furnished or
   temporary Dallas-area housing for roughly 30 days or longer.
 - ORGANIZATION_LEAD: a legitimate organization that arranges temporary housing
@@ -36,9 +43,10 @@ Lead types:
 
 Use only evidence supported by public web-search sources. Never invent identity,
 dates, budget, employer, occupation, housing need, or contact information. Do
-not turn a rental advertisement into a demand lead. Missing budget must not by
-itself disqualify a genuine demand signal. Prefer recent, specific, Dallas-area
-evidence. Return an empty candidates array when no supported signal is found.
+not turn a rental advertisement into a demand lead. Missing budget, exact dates,
+or an explicit housing request must not by itself disqualify a credible
+ORGANIZATION_LEAD or ASSIGNMENT_SIGNAL. Prefer recent, specific Dallas-area
+evidence. Return an empty candidates array only when no supported signal exists.
 """
 
 CANDIDATE_SCHEMA = {
@@ -204,12 +212,7 @@ async def _create_response_with_transient_retry(
 
 
 async def extract_candidate(query: str) -> dict | None:
-    """Run one campaign-level search and return its best supported signal.
-
-    The model may discover up to five signals in a single web-search call. They
-    are deduplicated and scored locally; the highest-value supported candidate
-    is returned to preserve compatibility with the existing campaign runner.
-    """
+    """Run one campaign-level search and return its best supported signal."""
     client, model = _client_and_model()
 
     response = await _create_response_with_transient_retry(
@@ -217,9 +220,11 @@ async def extract_candidate(query: str) -> dict | None:
         model=model,
         instructions=SYSTEM_PROMPT,
         input=(
-            "Run one broad campaign-level discovery search using all intent, "
-            "location, profession, and duration predicates in this query. "
-            "Return up to five distinct supported signals. Query: " + query
+            "Treat the following as a discovery brief, not as a literal search string. "
+            "Run multiple varied searches within this one web-search-enabled response. "
+            "First search for explicit housing need; then temporary assignment/relocation "
+            "signals; then organizations that coordinate temporary housing. Return up to "
+            "five distinct supported signals and classify them. Campaign brief: " + query
         ),
         tools=[
             {
@@ -243,17 +248,27 @@ async def extract_candidate(query: str) -> dict | None:
 
     data = json.loads(response.output_text)
     raw_candidates = data.get("candidates", [])
+    source_urls = _source_urls(response)
+
+    logger.info(
+        "Discovery summary: raw_candidates=%d web_sources=%d",
+        len(raw_candidates),
+        len(source_urls),
+    )
+
     if not raw_candidates:
         return None
 
-    source_urls = _source_urls(response)
     source_url_set = set(source_urls)
     used_sources = set()
     seen_keys = set()
     candidates = []
+    rejected_count = 0
+    duplicate_count = 0
 
     for item in raw_candidates:
         if item.get("lead_type") == "REJECT":
+            rejected_count += 1
             continue
 
         source_url = item.get("source_url")
@@ -269,6 +284,7 @@ async def extract_candidate(query: str) -> dict | None:
         evidence_key = " ".join(str(item.get("evidence", "")).lower().split())
         dedupe_key = source_url or evidence_key
         if not dedupe_key or dedupe_key in seen_keys:
+            duplicate_count += 1
             continue
         seen_keys.add(dedupe_key)
 
@@ -278,6 +294,14 @@ async def extract_candidate(query: str) -> dict | None:
         item["score_reasons"] = score.reasons
         item["ai_confidence"] = item.get("confidence")
         candidates.append(item)
+
+    logger.info(
+        "Discovery qualification: accepted_candidates=%d rejected_candidates=%d "
+        "duplicate_candidates=%d",
+        len(candidates),
+        rejected_count,
+        duplicate_count,
+    )
 
     if not candidates:
         return None
@@ -295,7 +319,16 @@ async def extract_candidate(query: str) -> dict | None:
         ),
         reverse=True,
     )
-    return candidates[0]
+
+    selected = candidates[0]
+    logger.info(
+        "Discovery selected: lead_type=%s classification=%s score=%s source_url=%s",
+        selected.get("lead_type"),
+        selected.get("classification"),
+        selected.get("score"),
+        selected.get("source_url"),
+    )
+    return selected
 
 
 def _source_urls(response) -> list[str]:
