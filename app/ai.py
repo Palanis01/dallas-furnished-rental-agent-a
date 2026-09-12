@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
@@ -46,7 +47,9 @@ dates, budget, employer, occupation, housing need, or contact information. Do
 not turn a rental advertisement into a demand lead. Missing budget, exact dates,
 or an explicit housing request must not by itself disqualify a credible
 ORGANIZATION_LEAD or ASSIGNMENT_SIGNAL. Prefer recent, specific Dallas-area
-evidence. Return an empty candidates array only when no supported signal exists.
+evidence. The source_url for each candidate must be the exact public page that
+supports that candidate's evidence, not a related housing provider or general
+website. Return an empty candidates array only when no supported signal exists.
 """
 
 CANDIDATE_SCHEMA = {
@@ -211,6 +214,39 @@ async def _create_response_with_transient_retry(
     raise RuntimeError("AI response request failed without an exception")
 
 
+def _normalize_url(url: str) -> str:
+    return url.strip().rstrip("/.,;)")
+
+
+def _evidence_urls(evidence: str | None) -> list[str]:
+    if not evidence:
+        return []
+    return [
+        _normalize_url(url)
+        for url in re.findall(r"https?://[^\s\]\[<>]+", evidence)
+    ]
+
+
+def _resolve_source_url(
+    evidence: str | None,
+    model_source_url: str | None,
+    web_source_urls: list[str],
+) -> str | None:
+    """Return only a source URL that is both cited by evidence/model and web-grounded."""
+    source_map = {_normalize_url(url): url for url in web_source_urls if url}
+
+    for cited_url in _evidence_urls(evidence):
+        if cited_url in source_map:
+            return source_map[cited_url]
+
+    if model_source_url:
+        normalized_model_url = _normalize_url(model_source_url)
+        if normalized_model_url in source_map:
+            return source_map[normalized_model_url]
+
+    return None
+
+
 async def extract_candidate(query: str) -> dict | None:
     """Run one campaign-level search and return its best supported signal."""
     client, model = _client_and_model()
@@ -259,26 +295,24 @@ async def extract_candidate(query: str) -> dict | None:
     if not raw_candidates:
         return None
 
-    source_url_set = set(source_urls)
-    used_sources = set()
     seen_keys = set()
     candidates = []
     rejected_count = 0
     duplicate_count = 0
+    ungrounded_source_count = 0
 
     for item in raw_candidates:
         if item.get("lead_type") == "REJECT":
             rejected_count += 1
             continue
 
-        source_url = item.get("source_url")
-        if source_url not in source_url_set:
-            source_url = next(
-                (url for url in source_urls if url not in used_sources),
-                None,
-            )
-        if source_url:
-            used_sources.add(source_url)
+        source_url = _resolve_source_url(
+            item.get("evidence"),
+            item.get("source_url"),
+            source_urls,
+        )
+        if not source_url:
+            ungrounded_source_count += 1
         item["source_url"] = source_url
 
         evidence_key = " ".join(str(item.get("evidence", "")).lower().split())
@@ -297,10 +331,11 @@ async def extract_candidate(query: str) -> dict | None:
 
     logger.info(
         "Discovery qualification: accepted_candidates=%d rejected_candidates=%d "
-        "duplicate_candidates=%d",
+        "duplicate_candidates=%d ungrounded_source_candidates=%d",
         len(candidates),
         rejected_count,
         duplicate_count,
+        ungrounded_source_count,
     )
 
     if not candidates:
