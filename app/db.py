@@ -14,11 +14,9 @@ def _normalize_database_url(raw_value: str):
     if not raw:
         raise RuntimeError("Database connection string is empty")
 
-    # Local development SQLite URL.
     if raw.startswith("sqlite"):
         return raw
 
-    # Already a PostgreSQL URL. Force the installed psycopg v3 driver.
     if raw.startswith("postgresql+psycopg://"):
         return raw
     if raw.startswith("postgresql://"):
@@ -26,7 +24,6 @@ def _normalize_database_url(raw_value: str):
     if raw.startswith("postgres://"):
         return raw.replace("postgres://", "postgresql+psycopg://", 1)
 
-    # Azure may provide an ADO-style semicolon-delimited connection string.
     if ";" in raw:
         values = {}
         for part in raw.split(";"):
@@ -67,8 +64,6 @@ def _normalize_database_url(raw_value: str):
             query=query,
         )
 
-    # Azure PostgreSQL commonly provides libpq format:
-    # host=... port=5432 dbname=... user=... password=... sslmode=require
     try:
         values = conninfo_to_dict(raw)
     except Exception as exc:
@@ -115,10 +110,15 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_db():
     if engine.dialect.name == "postgresql":
-        # Serialize startup DDL across multiple Gunicorn workers.
         with engine.begin() as connection:
             connection.execute(text("SELECT pg_advisory_xact_lock(724173745)"))
             Base.metadata.create_all(bind=connection)
+            connection.execute(
+                text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS lead_type VARCHAR(40)")
+            )
+            connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_leads_lead_type ON leads (lead_type)")
+            )
         return
 
     Base.metadata.create_all(bind=engine)
